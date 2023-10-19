@@ -1,0 +1,154 @@
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+public class MailSenderForHTTPSAPI {
+	
+    public static void main(String[] args) throws IOException {
+
+        String systemId = "YOUR_SYSEM-ID";
+        String bearerToken = "YOUR_TOKEN";
+        String userId = "USER_ID";
+        
+        String apiUrl = "https://ggoom.co.kr/API/mails/send.php?userId=" + userId;
+        
+        String line = null;
+        InputStream inputStream = null;
+        BufferedReader reader = null;         
+        HttpsURLConnection httpsConn = null;
+        
+        try {
+        	
+            // SSL ignore 설정
+            SSLContext sc = SSLContext.getInstance("SSL");
+            sc.init(null, createTrustManagers(), new java.security.SecureRandom());
+            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+            HostnameVerifier allHostsValid = (hostname, session) -> true;
+            HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
+            
+            // 쿼리 매개변수를 포함한 URL 객체 생성
+            URL url = new URL(apiUrl);
+
+            // URL에 연결을 열기
+            httpsConn = (HttpsURLConnection) url.openConnection();
+            
+            httpsConn.setHostnameVerifier(new HostnameVerifier() {
+				@Override
+				public boolean verify(String hostname, SSLSession session) {
+					// Ignore host name verification. It always returns true.
+					return true;
+				}
+			});
+
+			// URLConnection에 대한 doInput 필드값을 지정된 값으로 설정, URL 연결은 입출력에 사용될 수 있음
+      // true로 설정시 서버통신에서 입력 가능한 상태로 설정(응답 헤더와 메시지 등을 Read)
+      httpsConn.setDoInput(true);
+			// URLConnection에 대한 doOutput 필드값을 지정된 값으로 설정 
+      // true로 설정시 서버통신에서 출력 가능한 상태로 설정(outputstream으로 데이터 처리 등) (default : false) 
+			httpsConn.setDoOutput(true);
+			// Caches setting
+      httpsConn.setUseCaches(false);
+			// Read Timeout Setting
+      httpsConn.setReadTimeout(1000);
+			// httpsConn Timeout setting
+      httpsConn.setConnectTimeout(1000);
+
+      // 요청 메서드를 POST로 설정
+      httpsConn.setRequestMethod("POST");
+
+      // 요청 헤더 설정
+      httpsConn.setRequestProperty("System-ID", systemId);
+      httpsConn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+    
+      // 요청 본문을 위한 JSON 페이로드 생성
+      String requestBody = "{\"key\":\"value\",\"key\":\"value\"}";
+
+      // 필요한 경우 첨부 파일 추가
+      String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+      //String attachmentData = "첨부 파일의 이진 데이터";
+
+      // multipart/form-data용 Content-Type 헤더 설정
+      httpsConn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+      // 요청 본문을 작성하기 위한 출력 스트림 얻기
+      OutputStream outputStream = httpsConn.getOutputStream();
+      PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream, "UTF-8"), true);
+
+      // JSON 본문 파트 작성
+      writer.append("--" + boundary).append("\r\n");
+      writer.append("Content-Disposition: form-data; name=\"mail\"").append("\r\n\r\n");
+      writer.append(requestBody).append("\r\n");
+
+      // 첨부 파일 파트 작성
+			/*
+			 * writer.append("--" + boundary).append("\r\n"); writer.
+			 * append("Content-Disposition: form-data; name=\"attachments\"; filename=\"attachment.txt\""
+			 * ).append("\r\n");
+			 * writer.append("Content-Type: application/octet-stream").append("\r\n\r\n");
+			 * writer.append(attachmentData).append("\r\n"); writer.append("--" + boundary +
+			 * "--").append("\r\n");
+			 */
+
+      writer.close();
+      outputStream.close();
+
+      int responseCode = httpsConn.getResponseCode();
+      System.out.println("응답코드 : " + responseCode);
+      System.out.println("응답메세지 : " + httpsConn.getResponseMessage());
+        	
+			// Connect to host
+			httpsConn.connect();
+			
+			httpsConn.setInstanceFollowRedirects(true);
+	
+          if (responseCode == HttpsURLConnection.HTTP_OK) {
+              // 성공적인 응답 처리
+            inputStream = httpsConn.getInputStream();
+          } else {            	
+              // HTTP 응답 코드가 200이 아닌 경우의 오류 처리
+            inputStream = httpsConn.getErrorStream();
+          }
+        reader = new BufferedReader(new InputStreamReader(inputStream));
+
+        while ((line = reader.readLine()) != null) {
+           System.out.printf("%s\n", line); 
+        }
+            
+		} catch (UnknownHostException e) {
+			System.out.println("UnknownHostException : " + e);
+		} catch (MalformedURLException e) {
+			System.out.println("apiURL is not a URL I understand");
+        } catch (IOException e) {
+        	System.out.println("IOException :" + e);
+        } catch (Exception e) {
+        	System.out.println("error : " + e);
+        } finally {
+        	if (reader != null) {
+        		reader.close();
+        	}
+        	if (httpsConn != null) {
+        		httpsConn.disconnect(); 
+        	}
+        }
+    }
+    
+    /** URL Connection SSL ignore **/
+    public static TrustManager[] createTrustManagers() {
+        TrustManager[] trustAllCerts = new TrustManager[]{ new X509TrustManager() {
+            public void checkClientTrusted(java.security.cert.X509Certificate[] x509Certificates, String s) { }
+            public void checkServerTrusted(java.security.cert.X509Certificate[] x509Certificates, String s) { }
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[]{}; }
+        }};
+        
+        return trustAllCerts;
+    }    
+}
+
